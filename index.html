@@ -8,16 +8,42 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen font-sans p-3 sm:p-5">
+<body class="bg-gray-100 min-h-screen font-sans p-3 sm:p-5 flex flex-col justify-between">
 
-  <div class="max-w-md mx-auto space-y-4">
+  <!-- GERBANG KEAMANAN PIN PANITIA -->
+  <div id="authGate" class="max-w-sm mx-auto my-auto w-full bg-white p-6 rounded-3xl shadow-xl border border-gray-200 text-center space-y-4">
+    <div class="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto text-2xl shadow-inner">
+      <i class="fa fa-shield-halved"></i>
+    </div>
+    <div>
+      <h2 class="text-base font-extrabold text-gray-800 uppercase tracking-wide">Akses Khusus Panitia</h2>
+      <p class="text-xs text-gray-500 mt-1">Masukkan PIN / Kata Sandi Keamanan Pos Presensi untuk membuka pemindai.</p>
+    </div>
+    <div class="space-y-3 text-xs">
+      <input type="password" id="inputPinPetugas" placeholder="Masukkan PIN Petugas..." class="w-full border-2 border-gray-200 focus:border-emerald-600 rounded-xl p-3 text-center text-sm font-bold tracking-widest outline-none transition">
+      <button type="button" onclick="verifikasiPinPetugas()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white py-3 rounded-xl font-bold shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+        <i class="fa fa-key"></i> Buka Pemindai
+      </button>
+    </div>
+    <p id="pesanErrorGate" class="text-[11px] text-rose-600 font-semibold hidden"></p>
+  </div>
+
+  <!-- AREA APLIKASI PEMINDAI (TERKUNCI SECARA DEFAULT) -->
+  <div id="mainScannerApp" class="hidden max-w-md mx-auto w-full space-y-4">
     <!-- Header -->
-    <div class="bg-emerald-800 text-white p-4 rounded-2xl shadow text-center space-y-1">
-      <div class="inline-block bg-white/20 p-2 rounded-full mb-1">
-        <i class="fa fa-qrcode text-2xl"></i>
+    <div class="bg-emerald-800 text-white p-4 rounded-2xl shadow flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <div class="bg-white/20 p-2 rounded-xl">
+          <i class="fa fa-qrcode text-xl"></i>
+        </div>
+        <div class="text-left">
+          <h1 class="font-extrabold text-sm uppercase leading-tight">Pos Presensi QR</h1>
+          <p class="text-[10px] text-emerald-200">Sertifikasi Haji & Umrah 2026</p>
+        </div>
       </div>
-      <h1 class="font-extrabold text-base tracking-wide uppercase">Scanner Presensi Kegiatan</h1>
-      <p class="text-xs text-emerald-200">Sertifikasi Pembimbing Haji dan Umrah 2026</p>
+      <button type="button" onclick="kunciKembaliAplikasi()" class="text-xs bg-emerald-900/80 hover:bg-rose-700 px-3 py-1.5 rounded-lg border border-emerald-700 transition cursor-pointer font-semibold" title="Kunci Kembali">
+        <i class="fa fa-lock mr-1"></i> Kunci
+      </button>
     </div>
 
     <!-- Pilihan Ruang & Sesi -->
@@ -40,7 +66,7 @@
 
       <div>
         <label class="block font-bold text-gray-700 mb-1">Nama Petugas Scanner:</label>
-        <input type="text" id="adminName" value="Panitia Pos Ruang" class="w-full border rounded-lg p-2 outline-none">
+        <input type="text" id="adminName" value="Panitia Pos Ruang" class="w-full border rounded-lg p-2 outline-none bg-gray-50 font-medium">
       </div>
     </div>
 
@@ -77,10 +103,15 @@
     </div>
   </div>
 
+  <footer class="text-center text-[11px] text-gray-400 py-3">
+    &copy; 2026 Panitia Sertifikasi Pembimbing Haji & Umrah
+  </footer>
+
   <script>
     // GANTI TAUTAN INI DENGAN URL DEPLOY APPS SCRIPT ANDA
-    const APPS_SCRIPT_URL = "https://script.google.com/a/macros/uin-malang.ac.id/s/AKfycbzmQOBJOX0ekUcWQMdgRGG1KEjp8V_OAJ8VQ1rX1DPRRDB2I7zUUnU9KZfXZy_xBcTPmA/exec";
+    const APPS_SCRIPT_URL = "ISI_DENGAN_URL_DEPLOY_APPS_SCRIPT_ANDA";
 
+    let activeAuthToken = sessionStorage.getItem("scanner_auth_key") || "";
     let html5QrCode = null;
     let isScanning = false;
     let canScan = true;
@@ -118,8 +149,61 @@
     }
 
     window.onload = function() {
-      muatSesiJadwal();
+      if (activeAuthToken) {
+        bukaAplikasiDenganToken();
+      }
     };
+
+    function verifikasiPinPetugas() {
+      const pin = document.getElementById('inputPinPetugas').value.trim();
+      const pesanErr = document.getElementById('pesanErrorGate');
+      if (!pin) {
+        pesanErr.innerText = "Masukkan PIN keamanan terlebih dahulu!";
+        pesanErr.classList.remove('hidden');
+        return;
+      }
+
+      pesanErr.innerText = "Memvalidasi hak akses...";
+      pesanErr.className = "text-[11px] text-emerald-700 font-semibold";
+      pesanErr.classList.remove('hidden');
+
+      // Tes verifikasi ke backend
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "verifyToken", authToken: pin })
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (res.success) {
+          activeAuthToken = pin;
+          sessionStorage.setItem("scanner_auth_key", pin);
+          bukaAplikasiDenganToken();
+        } else {
+          pesanErr.innerText = res.message || "PIN keamanan tidak cocok!";
+          pesanErr.className = "text-[11px] text-rose-600 font-semibold";
+        }
+      })
+      .catch(err => {
+        pesanErr.innerText = "Kendala koneksi ke database.";
+        pesanErr.className = "text-[11px] text-rose-600 font-semibold";
+      });
+    }
+
+    function bukaAplikasiDenganToken() {
+      document.getElementById('authGate').classList.add('hidden');
+      document.getElementById('mainScannerApp').classList.remove('hidden');
+      muatSesiJadwal();
+    }
+
+    function kunciKembaliAplikasi() {
+      stopScanner();
+      sessionStorage.removeItem("scanner_auth_key");
+      activeAuthToken = "";
+      document.getElementById('inputPinPetugas').value = "";
+      document.getElementById('pesanErrorGate').classList.add('hidden');
+      document.getElementById('mainScannerApp').classList.add('hidden');
+      document.getElementById('authGate').classList.remove('hidden');
+    }
 
     function muatSesiJadwal() {
       const angkatan = document.getElementById('selectAngkatan').value;
@@ -128,10 +212,19 @@
 
       fetch(APPS_SCRIPT_URL, {
         method: "POST",
-        body: JSON.stringify({ action: "getJadwal", filterAngkatan: angkatan })
+        body: JSON.stringify({ 
+          action: "getJadwal", 
+          filterAngkatan: angkatan,
+          authToken: activeAuthToken 
+        })
       })
       .then(res => res.json())
       .then(res => {
+        if (!res.success && res.unauthorized) {
+          alert("Sesi kedaluwarsa atau PIN tidak valid.");
+          kunciKembaliAplikasi();
+          return;
+        }
         select.innerHTML = '<option value="">-- Pilih Sesi Kegiatan --</option>';
         if (res.success && res.data.length > 0) {
           res.data.forEach(s => {
@@ -198,7 +291,7 @@
       canScan = false;
 
       const idJadwal = document.getElementById('selectSesi').value;
-      const adminName = document.getElementById('adminName').value || "Panitia";
+      const adminName = document.getElementById('adminName').value || "Panitia Pos";
       const box = document.getElementById('boxHasil');
 
       box.className = "bg-white p-4 rounded-2xl border shadow-sm text-center text-xs space-y-1";
@@ -210,11 +303,19 @@
           action: "recordPresensi",
           idJadwal: idJadwal,
           identifier: decodedText,
-          adminName: adminName
+          adminName: adminName,
+          authToken: activeAuthToken
         })
       })
       .then(res => res.json())
       .then(res => {
+        if (!res.success && res.unauthorized) {
+          playBeep('error');
+          alert("Akses ditolak: PIN keamanan salah atau kedaluwarsa.");
+          kunciKembaliAplikasi();
+          return;
+        }
+
         if (res.success) {
           playBeep('success');
           const p = res.peserta;
