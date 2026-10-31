@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scanner Presensi Sertifikasi Haji</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans p-3 sm:p-5">
+
+  <div class="max-w-md mx-auto space-y-4">
+    <!-- Header -->
+    <div class="bg-emerald-800 text-white p-4 rounded-2xl shadow text-center space-y-1">
+      <div class="inline-block bg-white/20 p-2 rounded-full mb-1">
+        <i class="fa fa-qrcode text-2xl"></i>
+      </div>
+      <h1 class="font-extrabold text-base tracking-wide uppercase">Scanner Presensi Kegiatan</h1>
+      <p class="text-xs text-emerald-200">Sertifikasi Pembimbing Haji dan Umrah 2026</p>
+    </div>
+
+    <!-- Pilihan Ruang & Sesi -->
+    <div class="bg-white p-4 rounded-2xl shadow-sm border border-emerald-100 space-y-3 text-xs">
+      <div>
+        <label class="block font-bold text-gray-700 mb-1">Ruang Angkatan yang Dijaga:</label>
+        <select id="selectAngkatan" onchange="muatSesiJadwal()" class="w-full border-2 border-emerald-600 rounded-lg p-2 font-bold text-emerald-900 bg-emerald-50 outline-none">
+          <option value="11">Ruang Angkatan 11</option>
+          <option value="12">Ruang Angkatan 12</option>
+          <option value="Semua">Semua Ruang / Sesi</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block font-bold text-gray-700 mb-1">Sesi Jadwal Berlangsung:</label>
+        <select id="selectSesi" class="w-full border rounded-lg p-2 font-medium bg-white outline-none focus:ring-2 focus:ring-emerald-600">
+          <option value="">Memuat sesi kegiatan...</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block font-bold text-gray-700 mb-1">Nama Petugas Scanner:</label>
+        <input type="text" id="adminName" value="Panitia Pos Ruang" class="w-full border rounded-lg p-2 outline-none">
+      </div>
+    </div>
+
+    <!-- Kotak Live Camera Scanner -->
+    <div class="bg-white p-4 rounded-2xl shadow-sm border space-y-3 flex flex-col items-center">
+      <div class="w-full flex justify-between items-center border-b pb-2 text-xs">
+        <span class="font-bold text-gray-700 flex items-center gap-1.5">
+          <i class="fa fa-video text-emerald-600"></i> Kamera Pemindai
+        </span>
+        <span id="badgeKamera" class="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600">Kamera Mati</span>
+      </div>
+
+      <div id="qr-reader" class="w-full max-w-[280px] rounded-xl overflow-hidden border bg-gray-50 min-h-[240px] flex items-center justify-center text-gray-400">
+        <div class="text-center p-4 text-xs">
+          <i class="fa fa-camera text-3xl mb-1 text-gray-300"></i>
+          <p>Tekan tombol di bawah untuk menyalakan kamera</p>
+        </div>
+      </div>
+
+      <div class="flex gap-2 w-full pt-1 text-xs">
+        <button type="button" id="btnStart" onclick="startScanner()" class="w-1/2 bg-emerald-700 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-800 transition shadow flex items-center justify-center gap-1.5 cursor-pointer">
+          <i class="fa fa-play"></i> Nyalakan
+        </button>
+        <button type="button" id="btnStop" onclick="stopScanner()" disabled class="w-1/2 bg-gray-200 text-gray-400 py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-not-allowed">
+          <i class="fa fa-stop"></i> Matikan
+        </button>
+      </div>
+    </div>
+
+    <!-- Box Hasil Scan Real-time -->
+    <div id="boxHasil" class="bg-white p-4 rounded-2xl border border-dashed border-gray-300 shadow-sm text-center text-gray-400 text-xs">
+      <i class="fa fa-qrcode text-2xl mb-1 text-gray-300"></i>
+      <p>Arahkan kamera ke QR Code peserta untuk memverifikasi.</p>
+    </div>
+  </div>
+
+  <script>
+    // GANTI TAUTAN INI DENGAN URL DEPLOY APPS SCRIPT ANDA
+    const APPS_SCRIPT_URL = "https://script.google.com/a/macros/uin-malang.ac.id/s/AKfycbzmQOBJOX0ekUcWQMdgRGG1KEjp8V_OAJ8VQ1rX1DPRRDB2I7zUUnU9KZfXZy_xBcTPmA/exec";
+
+    let html5QrCode = null;
+    let isScanning = false;
+    let canScan = true;
+
+    function playBeep(type) {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'error') {
+          osc.frequency.value = 220;
+          osc.type = 'sawtooth';
+          gain.gain.setValueAtTime(0.35, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.4);
+        } else if (type === 'duplicate') {
+          osc.frequency.value = 440;
+          osc.type = 'triangle';
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
+        } else {
+          osc.frequency.value = 880;
+          osc.type = 'sine';
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.15);
+        }
+      } catch (e) {}
+    }
+
+    window.onload = function() {
+      muatSesiJadwal();
+    };
+
+    function muatSesiJadwal() {
+      const angkatan = document.getElementById('selectAngkatan').value;
+      const select = document.getElementById('selectSesi');
+      select.innerHTML = '<option value="">Memuat sesi kegiatan...</option>';
+
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "getJadwal", filterAngkatan: angkatan })
+      })
+      .then(res => res.json())
+      .then(res => {
+        select.innerHTML = '<option value="">-- Pilih Sesi Kegiatan --</option>';
+        if (res.success && res.data.length > 0) {
+          res.data.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            const tag = (s.angkatan === "Semua") ? "[Pleno]" : `[Angk. ${s.angkatan}]`;
+            opt.innerText = `${tag} ${s.tanggal} (${s.waktuMulai}-${s.waktuSelesai}) : ${s.kegiatan}`;
+            select.appendChild(opt);
+          });
+        } else {
+          select.innerHTML = '<option value="">Belum ada jadwal pada angkatan ini</option>';
+        }
+      })
+      .catch(err => {
+        select.innerHTML = '<option value="">Gagal memuat jadwal</option>';
+      });
+    }
+
+    function startScanner() {
+      const sesi = document.getElementById('selectSesi').value;
+      if (!sesi) {
+        alert("Pilih sesi kegiatan terlebih dahulu!");
+        return;
+      }
+
+      if (isScanning) return;
+      html5QrCode = new Html5Qrcode("qr-reader");
+
+      const config = { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 };
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        onScanSuccess
+      ).then(() => {
+        isScanning = true;
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStart').className = "w-1/2 bg-gray-200 text-gray-400 py-2.5 rounded-xl font-bold cursor-not-allowed";
+        document.getElementById('btnStop').disabled = false;
+        document.getElementById('btnStop').className = "w-1/2 bg-rose-600 text-white py-2.5 rounded-xl font-bold hover:bg-rose-700 cursor-pointer shadow";
+        document.getElementById('badgeKamera').innerText = "Kamera Aktif";
+        document.getElementById('badgeKamera').className = "px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 animate-pulse";
+      }).catch(err => {
+        alert("Gagal membuka kamera: " + err);
+      });
+    }
+
+    function stopScanner() {
+      if (!isScanning || !html5QrCode) return;
+      html5QrCode.stop().then(() => {
+        html5QrCode.clear();
+        isScanning = false;
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStart').className = "w-1/2 bg-emerald-700 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-800 cursor-pointer shadow";
+        document.getElementById('btnStop').disabled = true;
+        document.getElementById('btnStop').className = "w-1/2 bg-gray-200 text-gray-400 py-2.5 rounded-xl font-bold cursor-not-allowed";
+        document.getElementById('badgeKamera').innerText = "Kamera Mati";
+        document.getElementById('badgeKamera').className = "px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600";
+      });
+    }
+
+    function onScanSuccess(decodedText) {
+      if (!canScan) return;
+      canScan = false;
+
+      const idJadwal = document.getElementById('selectSesi').value;
+      const adminName = document.getElementById('adminName').value || "Panitia";
+      const box = document.getElementById('boxHasil');
+
+      box.className = "bg-white p-4 rounded-2xl border shadow-sm text-center text-xs space-y-1";
+      box.innerHTML = `<i class="fa fa-spinner fa-spin text-2xl text-emerald-600"></i><p class="font-bold text-gray-700 mt-1">Memvalidasi kehadiran...</p>`;
+
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "recordPresensi",
+          idJadwal: idJadwal,
+          identifier: decodedText,
+          adminName: adminName
+        })
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (res.success) {
+          playBeep('success');
+          const p = res.peserta;
+          box.className = "p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-50 text-left space-y-1 text-xs shadow-md";
+          box.innerHTML = `
+            <div class="flex justify-between items-center">
+              <span class="bg-emerald-700 text-white font-bold px-2 py-0.5 rounded text-[10px]">PRESENSI BERHASIL</span>
+              <span class="font-mono font-bold text-emerald-900">${p.waktu}</span>
+            </div>
+            <div class="text-sm font-extrabold text-gray-900 leading-snug">${p.nama}</div>
+            <div class="text-gray-700">NIK: <span class="font-mono">${p.nik}</span></div>
+            <div class="text-gray-700 font-semibold">Penempatan: <span class="text-emerald-800 font-bold">Angkatan ${p.angkatan}</span></div>
+          `;
+        } else if (res.wrongAngkatan) {
+          playBeep('error');
+          const p = res.peserta;
+          box.className = "p-4 rounded-2xl border-2 border-rose-500 bg-rose-50 text-left space-y-1.5 text-xs shadow-md";
+          box.innerHTML = `
+            <div class="text-rose-700 font-extrabold text-xs uppercase flex items-center gap-1">
+              <i class="fa fa-circle-exclamation text-base"></i> PERINGATAN: SALAH RUANGAN!
+            </div>
+            <div class="text-sm font-bold text-gray-900">${p.nama}</div>
+            <div class="p-2 bg-white rounded border border-rose-200 text-rose-900 text-[11px] space-y-0.5">
+              <div>Peserta: <strong class="text-emerald-700">Angkatan ${p.angkatanPeserta}</strong></div>
+              <div>Ruang Sesi: <strong class="text-rose-700">Angkatan ${p.angkatanSesi}</strong></div>
+            </div>
+          `;
+        } else if (res.duplicate) {
+          playBeep('duplicate');
+          box.className = "p-4 rounded-2xl border-2 border-amber-500 bg-amber-50 text-left space-y-1 text-xs shadow-md";
+          box.innerHTML = `
+            <div class="bg-amber-600 text-white font-bold px-2 py-0.5 rounded text-[10px] inline-block">SUDAH HADIR</div>
+            <div class="text-sm font-bold text-gray-900">${res.peserta.nama}</div>
+            <div class="text-amber-900 text-[11px]">${res.message}</div>
+          `;
+        } else {
+          playBeep('error');
+          box.className = "p-4 rounded-2xl border-2 border-rose-500 bg-rose-50 text-left text-xs space-y-1";
+          box.innerHTML = `<div class="font-bold text-rose-700">Presensi Ditolak</div><div class="text-rose-900">${res.message}</div>`;
+        }
+
+        setTimeout(() => { canScan = true; }, 2500);
+      })
+      .catch(err => {
+        playBeep('error');
+        box.innerHTML = `<span class="text-rose-600 font-bold">Kendala jaringan: ${err}</span>`;
+        setTimeout(() => { canScan = true; }, 2500);
+      });
+    }
+  </script>
+</body>
+</html>
